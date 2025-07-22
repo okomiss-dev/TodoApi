@@ -9,10 +9,10 @@ namespace TodoApi.Controllers
     [ApiController]
     public class TodoItemsController : ControllerBase
     {
-        private readonly TodoContext _context;
+        private readonly ApplicationDbContext _context;
         private readonly IMapper _mapper;
 
-        public TodoItemsController(TodoContext context, IMapper mapper)
+        public TodoItemsController(ApplicationDbContext context, IMapper mapper)
         {
             _context = context;
             _mapper = mapper;
