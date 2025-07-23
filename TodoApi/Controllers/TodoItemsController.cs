@@ -38,7 +38,7 @@ namespace TodoApi.Controllers
                 return NotFound();
             }
 
-            return _mapper.Map<TodoItemDTO>(todoItem);
+            return Ok(_mapper.Map<TodoItemDTO>(todoItem));
         }
 
         // PUT: api/TodoItems/5
