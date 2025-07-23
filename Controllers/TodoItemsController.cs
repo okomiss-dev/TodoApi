@@ -1,7 +1,7 @@
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using TodoApi.Models;
+using TodoApi.Repositories;
 
 namespace TodoApi.Controllers
 {
@@ -9,12 +9,12 @@ namespace TodoApi.Controllers
     [ApiController]
     public class TodoItemsController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly ITodoRepository _repository;
         private readonly IMapper _mapper;
 
-        public TodoItemsController(ApplicationDbContext context, IMapper mapper)
+        public TodoItemsController(ITodoRepository repository, IMapper mapper)
         {
-            _context = context;
+            _repository = repository;
             _mapper = mapper;
         }
 
@@ -22,16 +22,16 @@ namespace TodoApi.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<TodoItemDTO>>> GetTodoItems()
         {
-            return await _context.TodoItems
-            .Select(todoItem => _mapper.Map<TodoItemDTO>(todoItem))
-            .ToListAsync();
+            var todoItems = await _repository.GetAllAsync();
+            var todoItemDTOs = _mapper.Map<IEnumerable<TodoItemDTO>>(todoItems);
+            return Ok(todoItemDTOs);
         }
 
         // GET: api/TodoItems/5
         [HttpGet("{id}")]
         public async Task<ActionResult<TodoItemDTO>> GetTodoItem(long id)
         {
-            var todoItem = await _context.TodoItems.FindAsync(id);
+            var todoItem = await _repository.GetByIdAsync(id);
 
             if (todoItem == null)
             {
@@ -42,66 +42,64 @@ namespace TodoApi.Controllers
         }
 
         // PUT: api/TodoItems/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
         public async Task<IActionResult> PutTodoItem(long id, TodoItemDTO todoItemDTO)
         {
             if (id != todoItemDTO.Id)
             {
-                return BadRequest();
+                return BadRequest("ID mismatch");
             }
-
-            _context.Entry(_mapper.Map<TodoItem>(todoItemDTO)).State = EntityState.Modified;
 
             try
             {
-                await _context.SaveChangesAsync();
+                await _repository.UpdateAsync(_mapper.Map<TodoItem>(todoItemDTO));
             }
-            catch (DbUpdateConcurrencyException)
+            catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
             {
-                if (!TodoItemExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                return NotFound();
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("modified by another user"))
+            {
+                return Conflict("The item was modified by another user. Please refresh and try again.");
             }
 
             return NoContent();
         }
 
         // POST: api/TodoItems
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
         public async Task<ActionResult<TodoItemDTO>> PostTodoItem(TodoItemDTO todoItemDTO)
         {
-            _context.TodoItems.Add(_mapper.Map<TodoItem>(todoItemDTO));
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetTodoItem), new { id = todoItemDTO.Id }, todoItemDTO);
+            try
+            {
+                var todoItem = _mapper.Map<TodoItem>(todoItemDTO);
+                await _repository.CreateAsync(todoItem);
+                var resultDTO = _mapper.Map<TodoItemDTO>(todoItem);
+                return CreatedAtAction(nameof(GetTodoItem), new { id = todoItem.Id }, resultDTO);
+            }
+            catch (InvalidOperationException)
+            {
+                return StatusCode(500, "Failed to create TodoItem");
+            }
         }
 
         // DELETE: api/TodoItems/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTodoItem(long id)
         {
-            var todoItem = await _context.TodoItems.FindAsync(id);
-            if (todoItem == null)
+            var exists = await TodoItemExists(id);
+            if (!exists)
             {
                 return NotFound();
             }
 
-            _context.TodoItems.Remove(todoItem);
-            await _context.SaveChangesAsync();
-
+            await _repository.DeleteAsync(id);
             return NoContent();
         }
 
-        private bool TodoItemExists(long id)
+        private async Task<bool> TodoItemExists(long id)
         {
-            return _context.TodoItems.Any(e => e.Id == id);
+            return await _repository.ExistsAsync(id);
         }
     }
 }
