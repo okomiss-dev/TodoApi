@@ -14,7 +14,7 @@ public class ApplicationDbContext : DbContext
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         optionsBuilder
-            .UseSqlite(_configuration.GetConnectionString("Database"))
+            .UseNpgsql(_configuration.GetConnectionString("DefaultConnection"))
             .UseLoggerFactory(CreateLoggerFactory())
             .EnableSensitiveDataLogging();
     }
